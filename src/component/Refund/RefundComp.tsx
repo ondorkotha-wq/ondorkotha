@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search,
   AlertCircle,
@@ -344,6 +344,7 @@ function NewReturnRequestModal({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 const RefundCompContent = () => {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkOrderId = searchParams.get("orderId");
 
@@ -357,6 +358,10 @@ const RefundCompContent = () => {
   const axiosSecure = useAxiosSecure();
 
   const refundsPerPage = 4;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus]);
 
   const filteredRefunds = returnRequests.filter((r) => {
     const matchesStatus = filterStatus === "all" || r.status === filterStatus;
@@ -576,7 +581,10 @@ const RefundCompContent = () => {
                           {cancellingId === refund.id ? "Cancelling…" : "Cancel"}
                         </button>
                       )}
-                      <button className="px-3 py-1.5 text-xs border border-gray-300 rounded-sm hover:bg-gray-50 transition flex items-center gap-1.5">
+                      <button
+                        onClick={() => router.push("/help/contact-us")}
+                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-sm hover:bg-gray-50 transition flex items-center gap-1.5"
+                      >
                         <MessageSquare className="w-3.5 h-3.5" />
                         Contact Support
                       </button>
@@ -760,6 +768,26 @@ const RefundCompContent = () => {
                                 <p className="text-gray-700">
                                   Refund complete. Thank you for your
                                   patience.
+                                </p>
+                              </div>
+                            )}
+                            {refund.status === "REJECTED" && (
+                              <div className="flex items-start gap-2 text-xs">
+                                <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                                <p className="text-gray-700">
+                                  This request was declined
+                                  {refund.adminNote ? " — see the response from support above." : "."}{" "}
+                                  Contact support if you have questions.
+                                </p>
+                              </div>
+                            )}
+                            {refund.status === "CANCELLED" && (
+                              <div className="flex items-start gap-2 text-xs">
+                                <Ban className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                                <p className="text-gray-700">
+                                  You cancelled this request. You can file a
+                                  new one from this order if it&apos;s still
+                                  within the return window.
                                 </p>
                               </div>
                             )}
