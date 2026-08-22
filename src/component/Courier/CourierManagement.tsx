@@ -238,6 +238,7 @@ const BookModal: React.FC<{
     setBookError(null);
     try {
       const r = await axiosSecure.get(`/orders/track/${id}`);
+      console.log(r.data, "couriodata");
       const o = r.data;
 
       console.log(o, "data");
@@ -360,10 +361,11 @@ const BookModal: React.FC<{
                 <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                 <p className="text-xs text-amber-800">
                   <span className="font-semibold">
-                    {pickGate!.pickedCount}/{pickGate!.requiredCount} piece(s) picked.
+                    {pickGate!.pickedCount}/{pickGate!.requiredCount} piece(s)
+                    picked.
                   </span>{" "}
-                  Finish scanning all barcodes in Order Fulfillment before booking a
-                  shipment.
+                  Finish scanning all barcodes in Order Fulfillment before
+                  booking a shipment.
                 </p>
               </div>
             )}
@@ -774,7 +776,9 @@ const ShipmentDrawer: React.FC<{
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <p className="text-xs text-gray-400">Shipment Details</p>
-            <p className="text-base font-semibold text-gray-900 mt-0.5">#{id}</p>
+            <p className="text-base font-semibold text-gray-900 mt-0.5">
+              #{id}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -973,7 +977,9 @@ export default function CourierManagement() {
     Provider | null | "new"
   >(null);
   const [drawerShipmentId, setDrawerShipmentId] = useState<number | null>(null);
-  const [printingShipment, setPrintingShipment] = useState<Shipment | null>(null);
+  const [printingShipment, setPrintingShipment] = useState<Shipment | null>(
+    null,
+  );
 
   // ── Load ──
   const loadShipments = useCallback(async () => {

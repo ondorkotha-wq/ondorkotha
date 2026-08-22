@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity */
 /* eslint-disable @next/next/no-img-element */
 import { Product } from "@/types/product.types";
 import Link from "next/link";

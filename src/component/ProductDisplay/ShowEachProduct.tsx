@@ -13,6 +13,7 @@ import {
   StarHalf,
   Heart,
   X,
+  Flame,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import useFetchAProduct from "@/hooks/Products/useFetchAProduct";
@@ -324,6 +325,12 @@ export default function ShowEachProduct() {
   }, [currentVariant, selectedSizeId, cartItems]);
 
   const maxQuantity = Math.min(10, remainingQuantity || 0);
+
+  // Low-stock urgency threshold: shown only while a size is actually
+  // selectable and stock is low but not exhausted.
+  const LOW_STOCK_THRESHOLD = 5;
+  const isLowStock =
+    remainingQuantity > 0 && remainingQuantity <= LOW_STOCK_THRESHOLD;
 
   // Handle image logic: If color has specific images, use them; otherwise use default product images
   const displayImages = useMemo(() => {
@@ -979,6 +986,17 @@ export default function ShowEachProduct() {
               <p className="text-xs text-red-500 mt-2">Out of Stock</p>
             )}
           </div>
+
+          {/* Low Stock Alert — nudges urgency once stock is scarce */}
+          {isLowStock && (
+            <div className="flex items-center gap-2 mb-4 px-3 py-2 border border-red-200 bg-red-50 text-red-600">
+              <Flame size={14} className="shrink-0" />
+              <p className="text-[11px] font-semibold">
+                Hurry! Only {remainingQuantity}{" "}
+                {remainingQuantity === 1 ? "product" : "products"} remaining
+              </p>
+            </div>
+          )}
 
           {/* Stock Info */}
           <p className="text-[10px] uppercase font-bold text-gray-500 mb-4">
