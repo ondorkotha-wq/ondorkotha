@@ -38,7 +38,7 @@ const AllSubcategoriesComp = () => {
     setIsDeleting(true);
     try {
       await axiosSecure.delete(`/subcategory/${deleteTarget.slug}`);
-      toast.success("Product type deleted successfully");
+      toast.success("Subcategory deleted successfully");
       setDeleteTarget(null);
       await refetch();
     } catch (error: unknown) {
@@ -75,7 +75,7 @@ const AllSubcategoriesComp = () => {
       <DeleteConfirmationModal
         open={!!deleteTarget}
         isLoading={isDeleting}
-        title="Delete product type?"
+        title="Delete Subcategory?"
         message={`This will permanently delete "${deleteTarget?.name}". This cannot be undone.`}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}

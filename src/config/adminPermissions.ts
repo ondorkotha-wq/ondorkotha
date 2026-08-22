@@ -108,7 +108,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        name: "Product Type",
+        name: "Subcategories",
         icon: MdCategory,
         sub: [
           { href: "/admin/subcategory/all", label: "All Subcategories", requiredAction: "CATEGORY_VIEW" },
