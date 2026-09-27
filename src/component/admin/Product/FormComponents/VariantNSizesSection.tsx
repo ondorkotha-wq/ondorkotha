@@ -108,6 +108,7 @@ const VariantNSizes = ({
                             <th className="pb-3 pl-2">Size</th>
                             <th className="pb-3">SKU</th>
                             <th className="pb-3">Price</th>
+                            <th className="pb-3">Weight (kg)</th>
                             <th className="pb-3">Discount Type</th>
                             <th className="pb-3">Discount</th>
                             <th className="pb-3">
@@ -210,6 +211,26 @@ const SizeRow = memo(
               onFieldChange(colorId, sizeDetail.sizeId, "price", e.target.value)
             }
             className="w-20 px-2 py-1 text-xs border border-slate-200 rounded focus:border-blue-500 outline-none"
+          />
+        </td>
+        <td className="py-3">
+          {/* Blank = use the product weight for delivery-fee quotes. */}
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={sizeDetail.weight ?? ""}
+            onChange={(e) =>
+              onFieldChange(
+                colorId,
+                sizeDetail.sizeId,
+                "weight",
+                e.target.value === "" ? null : e.target.value,
+              )
+            }
+            className="w-20 px-2 py-1 text-xs border border-slate-200 rounded focus:border-blue-500 outline-none"
+            placeholder={String(formData.weight ?? "")}
+            title="Leave blank to use the product weight"
           />
         </td>
         <td className="py-3">

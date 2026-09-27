@@ -81,8 +81,22 @@ export interface SizeDetail {
   quantity: number;
   discountType?: "PERCENT" | "FIXED" | null; // Add discount fields
   discount?: number;
+  // Shipping weight override (kg); null/blank = use the product weight.
+  weight?: number | string | null;
   trackingMode?: "LEGACY_QUANTITY" | "PIECE_BARCODE";
 }
+
+// Blank or invalid → null, so the backend falls back to the product weight.
+const sizeWeightPayload = (size: SizeDetail): number | null => {
+  const w = Number(size.weight);
+  return size.weight !== null &&
+    size.weight !== undefined &&
+    size.weight !== "" &&
+    Number.isFinite(w) &&
+    w > 0
+    ? w
+    : null;
+};
 
 type UploadedImage =
   | { url: string; serialNo: number; alt?: string; colorId?: never }
@@ -92,7 +106,13 @@ type ColorImageMap = Record<number, string[]>;
 
 type ProductColorCreateInput = {
   colorId: number;
-  sizes?: { sizeId: number; sku?: string; price?: number; quantity: number }[];
+  sizes?: {
+    sizeId: number;
+    sku?: string;
+    price?: number;
+    quantity: number;
+    weight?: number | null;
+  }[];
   useDefaultImages?: boolean;
   images?: string[];
 };
@@ -360,6 +380,7 @@ const ProductForm = ({ propProductId }: ProductFormProps) => {
           quantity: s.quantity || 0,
           discountType: s.discountType || null,
           discount: s.discount || 0,
+          weight: s.weight != null ? Number(s.weight) : null,
           trackingMode: s.trackingMode,
         })) || [];
     });
@@ -876,6 +897,7 @@ const ProductForm = ({ propProductId }: ProductFormProps) => {
                     sku: size.sku || "",
                     price: Number(size.price) || Number(formData.basePrice),
                     quantity: Math.max(0, Number(size.quantity) || 0),
+                    weight: sizeWeightPayload(size),
                     ...sizePayloadDiscount(size),
                   }));
 
@@ -982,6 +1004,7 @@ const ProductForm = ({ propProductId }: ProductFormProps) => {
                 sku: size.sku || "",
                 price: Number(size.price) || Number(formData.basePrice),
                 quantity: Math.max(0, Number(size.quantity) || 0),
+                weight: sizeWeightPayload(size),
                 ...sizePayloadDiscount(size),
               }));
             }
