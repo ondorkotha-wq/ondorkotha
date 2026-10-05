@@ -1116,6 +1116,12 @@ const ORDER_STATUS_OPTIONS = (Object.keys(ORDER_STATUS) as OrderStatus[]).map(
   (s) => ({ label: ORDER_STATUS[s].label, value: s }),
 );
 
+type CustomerType = "guest" | "registered";
+const CUSTOMER_TYPE_OPTIONS: { label: string; value: CustomerType }[] = [
+  { label: "Guest orders", value: "guest" },
+  { label: "Registered customers", value: "registered" },
+];
+
 export default function AllOrdersComponent() {
   const axiosSecure = useAxiosSecure();
   const [page, setPage] = useState(1);
@@ -1123,6 +1129,7 @@ export default function AllOrdersComponent() {
   const [status, setStatus] = useState<OrderStatus | "">("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [customerType, setCustomerType] = useState<CustomerType | "">("");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [fraudHistoryPhone, setFraudHistoryPhone] = useState<string | null>(
     null,
@@ -1151,6 +1158,7 @@ export default function AllOrdersComponent() {
     status: status || undefined,
     from: from || undefined,
     to: to || undefined,
+    customerType: customerType || undefined,
   });
 
   // Debounce search
@@ -1166,10 +1174,11 @@ export default function AllOrdersComponent() {
     setStatus("");
     setFrom("");
     setTo("");
+    setCustomerType("");
     setPage(1);
   };
 
-  const hasFilters = !!(search || status || from || to);
+  const hasFilters = !!(search || status || from || to || customerType);
 
   const typedOrders = (orders?.data ?? []) as FullOrder[];
   const typedMeta = orders?.meta ?? {
@@ -1267,6 +1276,15 @@ export default function AllOrdersComponent() {
             options={ORDER_STATUS_OPTIONS}
             placeholder="All Statuses"
           />
+          <FilterSelect
+            value={customerType}
+            onChange={(v) => {
+              setCustomerType(v);
+              setPage(1);
+            }}
+            options={CUSTOMER_TYPE_OPTIONS}
+            placeholder="All Customers"
+          />
           <DateRangePicker
             from={from}
             to={to}
@@ -1347,8 +1365,17 @@ export default function AllOrdersComponent() {
 
               {/* Customer */}
               <td className="px-4 py-3.5">
-                <p className="text-xs font-semibold text-slate-800 leading-tight">
+                <p className="text-xs font-semibold text-slate-800 leading-tight flex items-center gap-1.5">
                   {order.customerName}
+                  {/* placed without an account (phone verified by OTP) */}
+                  {order.userId === null && (
+                    <span
+                      title="Guest order — placed without an account, phone verified by OTP"
+                      className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-sky-50 text-sky-700"
+                    >
+                      Guest
+                    </span>
+                  )}
                 </p>
                 <p className="text-[10px] text-slate-400 font-mono mt-0.5">
                   {order.customerPhone}

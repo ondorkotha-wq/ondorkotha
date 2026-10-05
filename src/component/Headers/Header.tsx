@@ -16,7 +16,9 @@ import {
   ChevronLeft,
   LogOut,
   Heart,
+  Package,
 } from "lucide-react";
+import { GUEST_CHECKOUT_ENABLED } from "@/config/features";
 import PromoBannerContainer from "./PromoBannerContainer";
 import type {
   MobileMenuItem,
@@ -210,6 +212,18 @@ const MobileMenuDrawer: React.FC<MobileMenuDrawerProps> = ({
                 </>
               )}
             </div>
+
+            {/* guest orders, also reachable from the header icon */}
+            {GUEST_CHECKOUT_ENABLED && !loading && !token && (
+              <Link
+                href="/my-orders"
+                onClick={() => setIsMenuOpen(false)}
+                className="py-3 border-b border-gray-100 text-sm text-gray-900 font-semibold flex items-center gap-2"
+              >
+                <Package size={18} />
+                My Orders
+              </Link>
+            )}
 
             {navItems?.map((item) => {
               const isSale = item.seriesType === "SALE";
@@ -532,6 +546,19 @@ const Header = () => {
                     </>
                   )}
                 </div>
+
+                {/* guest orders placed on this browser (signed-in customers
+                    find theirs in the dashboard) */}
+                {GUEST_CHECKOUT_ENABLED && !loading && !token && (
+                  <Link
+                    href="/my-orders"
+                    title="My Orders"
+                    aria-label="My Orders"
+                    className="relative text-gray-700 hover:text-amber-700 transition-colors"
+                  >
+                    <Package size={20} />
+                  </Link>
+                )}
 
                 {/* wish icon */}
                 <Link

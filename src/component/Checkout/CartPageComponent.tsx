@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-expressions */
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
@@ -12,12 +11,12 @@ import useAxiosSecure from "@/hooks/Axios/useAxiosSecure";
 import Link from "next/link";
 import OrderSummary from "./OrderSummary";
 import useCartCount from "@/hooks/Cart/useCartCount";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import useFetchRelatedProducts from "@/hooks/Products/RelatedProducts/useFetchRelatedProducts";
 import LoadingDots from "../Loading/LoadingDS";
 import { FullScreenCenter } from "../Screen/FullScreenCenter";
-import { isAuthenticated } from "@/utils/auth";
-import { getVisitorId } from "@/utils/visitor";
+import { cartOwnerParams } from "@/utils/visitor";
 import { pushGTMEvent } from "@/lib/gtm";
 
 const buildCartItem = (item: any) => {
@@ -93,7 +92,10 @@ const CartPageComponent = () => {
       productIds: cartItemIds.join(","),
     });
 
-  if (isLoading || isFetching) {
+  // Full-screen loader only until the first cart arrives. Refetches after a
+  // quantity change or removal keep the page on screen; the affected row
+  // shows its own busy state instead.
+  if (!cart && (isLoading || isFetching)) {
     return (
       <FullScreenCenter>
         <LoadingDots />
@@ -184,8 +186,8 @@ const CartPageComponent = () => {
 
 type CartItemComponentProps = {
   item: any;
-  refetch: () => void;
-  refetchCount: () => void;
+  refetch: () => Promise<unknown> | void;
+  refetchCount: () => Promise<unknown> | void;
 };
 
 const CartItemComponent = ({
@@ -203,43 +205,73 @@ const CartItemComponent = ({
 
   const axiosSecure = useAxiosSecure();
 
+  // Row-level busy state: blocks overlapping requests on this row while the
+  // rest of the page stays usable. pendingQty shows the chosen quantity
+  // straight away instead of the old one until the refetch lands.
+  const [busy, setBusy] = useState(false);
+  const [pendingQty, setPendingQty] = useState<number | null>(null);
+
   // update quantity
   const updateQuantity = async (quantity: number) => {
-    await axiosSecure.patch(`/cart/items/${item.id}`, {
-      quantity,
-    });
+    setBusy(true);
+    setPendingQty(quantity);
+    try {
+      await axiosSecure.patch(
+        `/cart/items/${item.id}`,
+        { quantity },
+        { params: await cartOwnerParams() },
+      );
 
-    pushGTMEvent({
-      event: "add_to_cart",
-      currency: "BDT",
-      value: Number(item.priceAtAdd) * quantity,
-      items: [{ ...buildCartItem(item), quantity }],
-    });
+      pushGTMEvent({
+        event: "add_to_cart",
+        currency: "BDT",
+        value: Number(item.priceAtAdd) * quantity,
+        items: [{ ...buildCartItem(item), quantity }],
+      });
 
-    refetch();
+      await refetch();
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.message || "Couldn't update the quantity",
+      );
+    } finally {
+      setPendingQty(null);
+      setBusy(false);
+    }
   };
 
   // remove cart / delete cart
   const handleRemoveItem = async () => {
-    let visitorId = null;
-    isAuthenticated() && (visitorId = getVisitorId());
-    await axiosSecure.delete(`/cart/items/${item.id}`, {
-      data: { visitorId },
-    });
+    if (busy) return;
+    setBusy(true);
+    try {
+      await axiosSecure.delete(`/cart/items/${item.id}`, {
+        params: await cartOwnerParams(),
+      });
 
-    pushGTMEvent({
-      event: "remove_from_cart",
-      currency: "BDT",
-      value: Number(item.priceAtAdd) * item.quantity,
-      items: [{ ...buildCartItem(item), quantity: item.quantity }],
-    });
+      pushGTMEvent({
+        event: "remove_from_cart",
+        currency: "BDT",
+        value: Number(item.priceAtAdd) * item.quantity,
+        items: [{ ...buildCartItem(item), quantity: item.quantity }],
+      });
 
-    refetch();
-    refetchCount();
+      // the row unmounts once the refetched cart no longer contains it
+      await Promise.all([refetch(), refetchCount()]);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Couldn't remove the item");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <div className="flex flex-col md:flex-row py-6 border-b border-gray-200 gap-4 items-start md:items-center">
+    <div
+      className={`flex flex-col md:flex-row py-6 border-b border-gray-200 gap-4 items-start md:items-center transition-opacity ${
+        busy ? "opacity-50 pointer-events-none" : ""
+      }`}
+      aria-busy={busy}
+    >
       {/* Product Image & Info */}
       <div className="flex flex-2 gap-4 w-full">
         <Link
@@ -290,7 +322,8 @@ const CartItemComponent = ({
         <span className="md:hidden text-sm">Qty:</span>
         <select
           className="border border-gray-300 p-1 text-sm w-16 bg-transparent"
-          value={item.quantity}
+          value={pendingQty ?? item.quantity}
+          disabled={busy}
           onChange={(e) => updateQuantity(Number(e.target.value))}
         >
           {Array.from({ length: maxQuantity }, (_, i) => i + 1).map((n) => (

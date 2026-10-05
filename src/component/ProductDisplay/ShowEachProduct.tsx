@@ -34,7 +34,8 @@ import useFetchCarts from "@/hooks/Cart/useCarts";
 import useFetchRelatedProducts from "@/hooks/Products/RelatedProducts/useFetchRelatedProducts";
 import useFetchProducts from "@/hooks/Products/useFetchProducts";
 import useFetchProductReview from "@/hooks/Products/Review/useFetchProductReview";
-import { getVisitorId } from "@/utils/visitor";
+import { cartOwnerParams, getVisitorId } from "@/utils/visitor";
+import { GUEST_CHECKOUT_ENABLED } from "@/config/features";
 import useIsWished from "@/hooks/Wish/useIsWished";
 import { FullScreenCenter } from "../Screen/FullScreenCenter";
 import { GTMProduct, pushGTMEvent } from "@/lib/gtm";
@@ -478,10 +479,10 @@ export default function ShowEachProduct() {
       return;
     }
 
-    // Buy Now goes straight to checkout, which requires an account —
-    // gate here instead of letting the user hit that wall after they've
-    // already committed. Resumes automatically once signed in.
-    if (!isAuthenticated()) {
+    // Buy Now goes straight to checkout. Without guest checkout that needs
+    // an account — gate here instead of letting the user hit that wall
+    // after they've already committed. Resumes automatically once signed in.
+    if (!isAuthenticated() && !GUEST_CHECKOUT_ENABLED) {
       setPendingBuyNow(true);
       setIsModalOpen(true);
       return;
@@ -503,8 +504,20 @@ export default function ShowEachProduct() {
     try {
       const productSizeId = selectedSizeId || currentVariant?.color?.sizes?.[0]?.id;
 
-      await axiosSecure.delete("/cart/clear");
-      await axiosSecure.post("/cart/items", { productSizeId, quantity });
+      if (isAuthenticated()) {
+        await axiosSecure.delete("/cart/clear");
+        await axiosSecure.post("/cart/items", { productSizeId, quantity });
+      } else {
+        // Guests own their cart by visitorId (reachable only when guest
+        // checkout is enabled — see the gate in handleBuyNow)
+        const params = await cartOwnerParams();
+        await axiosSecure.delete("/cart/clear", { params });
+        await axiosPublic.post("/guest/cart/items", {
+          visitorId: params.visitorId,
+          productSizeId,
+          quantity,
+        });
+      }
 
       refetch();
 

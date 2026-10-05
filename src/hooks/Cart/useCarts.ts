@@ -48,7 +48,7 @@ interface UseFetchCartsReturn {
   isFetching: boolean;
   isError: boolean;
   error: AxiosError | null;
-  refetch: () => void;
+  refetch: () => Promise<unknown>;
 }
 
 // ============================================================================

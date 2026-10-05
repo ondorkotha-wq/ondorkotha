@@ -4,9 +4,12 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import useAxiosSecure from "@/hooks/Axios/useAxiosSecure";
 import useTrackOrder from "@/hooks/Track/useTrack";
+import { useGuestOrder } from "@/hooks/Order/useGuestOrders";
+import { useAuth } from "@/context/AuthContext";
 import {
   CheckCircle,
   Package,
@@ -41,10 +44,14 @@ const statusIcons: Record<string, React.ReactNode> = {
 const taka = (n: number) =>
   `৳${Number(n).toLocaleString("en-BD", { minimumFractionDigits: 0 })}`;
 
-const TrackOrderContent = () => {
+// `guest`: the /my-orders/track view. Reads the order through the guest
+// endpoint (scoped to this browser's visitorId) and leaves out what needs an
+// account: invoice download and return requests.
+const TrackOrderContent = ({ guest = false }: { guest?: boolean }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const axiosSecure = useAxiosSecure();
+  const { token, loading: authLoading } = useAuth();
 
   const [orderIdInput, setOrderIdInput] = useState(
     searchParams.get("orderId") ?? "",
@@ -54,10 +61,27 @@ const TrackOrderContent = () => {
   );
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
-  const { order, isLoading, isError, error } = useTrackOrder({
-    trackingId,
+  // Both hooks always run (hook rules); the one not in use gets an empty id,
+  // which keeps its query disabled
+  const signedInTrack = useTrackOrder({
+    trackingId: guest ? "" : trackingId,
     details: true,
   });
+  const guestTrack = useGuestOrder(guest ? trackingId : "");
+  const { order, isLoading, isError, error } = guest
+    ? guestTrack
+    : signedInTrack;
+
+  // A signed-in customer on the guest view: their orders live in the account
+  useEffect(() => {
+    if (guest && !authLoading && token) {
+      router.replace(
+        trackingId
+          ? `/customer/order-tracking?orderId=${encodeURIComponent(trackingId)}`
+          : "/customer/orders",
+      );
+    }
+  }, [guest, authLoading, token, trackingId, router]);
 
   useEffect(() => {
     const fromQuery = searchParams.get("orderId");
@@ -137,8 +161,9 @@ const TrackOrderContent = () => {
                 onChange={(e) => setOrderIdInput(e.target.value)}
               />
               <p className="mt-2 text-sm text-gray-500">
-                Find your order number in your confirmation email or order
-                history
+                {guest
+                  ? "Find your order number in My Orders. Only orders placed on this browser can be opened here."
+                  : "Find your order number in your confirmation email or order history"}
               </p>
             </div>
 
@@ -168,7 +193,9 @@ const TrackOrderContent = () => {
             <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-2" />
             <p className="text-red-700 font-medium">
               {(error as any)?.response?.status === 404
-                ? "Order not found. Please check your order number."
+                ? guest
+                  ? "Order not found on this browser. Please check the order number in My Orders."
+                  : "Order not found. Please check your order number."
                 : "Couldn't load this order. Please try again."}
             </p>
           </div>
@@ -392,8 +419,23 @@ const TrackOrderContent = () => {
                     )}
                   </div>
 
+                  {/* returns need an account; logging in on this device
+                      moves guest orders into it */}
+                  {guest && canReturn && (
+                    <p className="text-sm text-gray-600 pt-2">
+                      To request a return,{" "}
+                      <Link
+                        href="/login?redirect=/customer/orders"
+                        className="underline hover:text-black"
+                      >
+                        log in or create an account
+                      </Link>{" "}
+                      on this device — your guest orders move to your account.
+                    </p>
+                  )}
+
                   <div className="flex flex-wrap gap-3 pt-2">
-                    {order.invoiceId && (
+                    {!guest && order.invoiceId && (
                       <button
                         onClick={handleDownloadInvoice}
                         disabled={downloadingInvoice}
@@ -403,7 +445,7 @@ const TrackOrderContent = () => {
                         {downloadingInvoice ? "Downloading…" : "Download Invoice"}
                       </button>
                     )}
-                    {canReturn && (
+                    {!guest && canReturn && (
                       <button
                         onClick={() =>
                           router.push(`/refund?orderId=${order.orderNumber}`)
@@ -439,10 +481,12 @@ const TrackOrderContent = () => {
                       Contact Support
                     </button>
                     <button
-                      onClick={() => router.push("/customer/orders")}
+                      onClick={() =>
+                        router.push(guest ? "/my-orders" : "/customer/orders")
+                      }
                       className="px-4 py-2 bg-white text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm"
                     >
-                      Order History
+                      {guest ? "My Orders" : "Order History"}
                     </button>
                   </div>
                 </div>
@@ -455,7 +499,7 @@ const TrackOrderContent = () => {
   );
 };
 
-const TrackOrder = () => (
+const TrackOrder = ({ guest = false }: { guest?: boolean }) => (
   <Suspense
     fallback={
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -463,7 +507,7 @@ const TrackOrder = () => (
       </div>
     }
   >
-    <TrackOrderContent />
+    <TrackOrderContent guest={guest} />
   </Suspense>
 );
 

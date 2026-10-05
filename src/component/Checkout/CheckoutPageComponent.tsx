@@ -20,6 +20,9 @@ import useFetchZones from "@/hooks/Districts/useFetchZones";
 import useFetchAreaList from "@/hooks/Districts/useFetchAreaList";
 import { pushGTMEvent } from "@/lib/gtm";
 import { buildUserData } from "@/lib/hash";
+import { useQueryClient } from "@tanstack/react-query";
+import { cartOwnerParams } from "@/utils/visitor";
+import { GUEST_CHECKOUT_ENABLED } from "@/config/features";
 
 // Controlled via NEXT_PUBLIC_SSLCOMMERZ_ENABLED — set to "true" in .env to
 // bring back the "Pay Now" option once the gateway is live again.
@@ -27,6 +30,11 @@ const SSLCOMMERZ_ENABLED = process.env.NEXT_PUBLIC_SSLCOMMERZ_ENABLED === "true"
 
 const CheckoutPageComponent = () => {
   const { user, loading } = useAuth();
+  // Guest checkout: COD only, phone always verified by OTP, no coupons
+  const isGuest = !loading && !user;
+  const queryClient = useQueryClient();
+  // Set when the server says this order needs an account (advance deposit)
+  const [loginPrompt, setLoginPrompt] = useState<string | null>(null);
 
   const [selectedZone, setSelectedZone] = useState<number | "">("");
   const [selectedArea, setSelectedArea] = useState<number | "">("");
@@ -215,23 +223,24 @@ const CheckoutPageComponent = () => {
     let cancelled = false;
     setDeliveryFeeStatus("loading");
 
-    const timeout = setTimeout(() => {
-      axiosSecure
-        .post("/delivery/fee", {
+    const timeout = setTimeout(async () => {
+      try {
+        // guests identify their cart by visitorId; signed-in users by token
+        const owner = await cartOwnerParams();
+        const res = await axiosSecure.post("/delivery/fee", {
           cityId: address.districtId,
           zoneId: selectedZone,
           cartId: cart.id,
-        })
-        .then((res) => {
-          if (cancelled) return;
-          setDeliveryFee(Number(res.data.fee));
-          setDeliveryFeeStatus("ready");
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setDeliveryFee(0);
-          setDeliveryFeeStatus("error");
+          ...owner,
         });
+        if (cancelled) return;
+        setDeliveryFee(Number(res.data.fee));
+        setDeliveryFeeStatus("ready");
+      } catch {
+        if (cancelled) return;
+        setDeliveryFee(0);
+        setDeliveryFeeStatus("error");
+      }
     }, 400);
 
     return () => {
@@ -240,11 +249,19 @@ const CheckoutPageComponent = () => {
     };
   }, [address.districtId, axiosSecure, cart?.id, cart?.items, selectedZone]);
 
+  // Online payment is account-only, so guests stay on COD (and are blocked
+  // from ordering when COD isn't available, see the payment section)
   useEffect(() => {
-    if (SSLCOMMERZ_ENABLED && !finalCODAvailable && paymentMethod === "cod") {
+    if (
+      SSLCOMMERZ_ENABLED &&
+      !isGuest &&
+      !finalCODAvailable &&
+      paymentMethod === "cod"
+    ) {
       setPaymentMethod("online");
     }
-  }, [finalCODAvailable, paymentMethod]);
+    if (isGuest && paymentMethod === "online") setPaymentMethod("cod");
+  }, [finalCODAvailable, paymentMethod, isGuest]);
 
   // Reset OTP state whenever the phone number changes
   useEffect(() => {
@@ -259,8 +276,9 @@ const CheckoutPageComponent = () => {
     return () => clearTimeout(t);
   }, [resendCountdown]);
 
-  // loading state
-  if (loading || isCartLoading || isFetching) {
+  // Full-screen loader only until auth and the first cart are known.
+  // Refetches (coupon removed, price corrected…) keep the form on screen.
+  if (loading || (!cart && (isCartLoading || isFetching))) {
     return (
       <FullScreenCenter>
         <LoadingDots />
@@ -268,8 +286,8 @@ const CheckoutPageComponent = () => {
     );
   }
 
-  // user not available
-  if (!loading && !user) {
+  // Not signed in and guest checkout is switched off: account required
+  if (!user && !GUEST_CHECKOUT_ENABLED) {
     return (
       <div className="max-w-[1500px] mx-auto px-4 py-16 text-center">
         <div className="max-w-md mx-auto space-y-6">
@@ -297,16 +315,36 @@ const CheckoutPageComponent = () => {
   const buildOrderPayload = (withOtp?: string) => ({
     cartId: cart!.id,
     address,
-    paymentMethod: paymentMethod === "cod" ? "COD" : "ONLINE",
+    // guests are COD-only (the backend rejects anything else)
+    paymentMethod: !isGuest && paymentMethod === "online" ? "ONLINE" : "COD",
     expectedDeliveryFee: deliveryFee,
     ...(withOtp ? { otp: withOtp } : {}),
   });
+
+  // Signed-in orders go to /orders/create; guest orders to the guest route,
+  // which identifies the cart owner by visitorId (a UUID)
+  const postOrder = async (payload: ReturnType<typeof buildOrderPayload>) => {
+    if (!isGuest) return axiosSecure.post(`/orders/create`, payload);
+    const { visitorId } = await cartOwnerParams();
+    return axiosSecure.post(`/guest/orders/create`, payload, {
+      params: { visitorId },
+    });
+  };
+
+  const resetOtpStep = () => {
+    setOtpRequired(false);
+    setOtpValue("");
+  };
 
   const handlePlaceOrder = async () => {
     if (!cart?.id) { toast.error("Cart not found"); return; }
     if (!selectedZone) { toast.error("Please select zone"); return; }
     if (deliveryFeeStatus !== "ready") {
       toast.error("Delivery charge is still being calculated");
+      return;
+    }
+    if (isGuest && !finalCODAvailable) {
+      toast.error("Cash on Delivery isn't available for this order");
       return;
     }
 
@@ -326,22 +364,27 @@ const CheckoutPageComponent = () => {
         city: selectedDistrict?.name,
       });
 
-      const { data } = await axiosSecure.post(
-        `/orders/create`,
+      const { data } = await postOrder(
         buildOrderPayload(otpRequired ? otpValue : undefined),
       );
 
-      // Backend returns this shape when phone differs and no OTP was sent yet
+      // Sent for every guest order, and for signed-in users ordering to a
+      // phone other than their account phone. Within a minute of the last
+      // code the server doesn't send another SMS — its message says so.
       if (data?.status === "OTP_REQUIRED") {
         setOtpRequired(true);
         setOtpValue("");
         setResendCountdown(60);
-        toast("OTP sent to +880" + address.phone);
+        toast(data?.message || "OTP sent to +880" + address.phone);
         return;
       }
 
       const orderId = data?.orderId;
       if (!orderId) { toast.error("Order creation failed"); return; }
+
+      // the cart is checked out server-side; refresh it and the header count
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
+      queryClient.invalidateQueries({ queryKey: ["cartCount"] });
 
       toast.success("Order placed successfully!");
       pushGTMEvent({
@@ -365,29 +408,46 @@ const CheckoutPageComponent = () => {
         router.push(`/checkout/payment?orderId=${orderId}`);
       }
     } catch (error: any) {
+      const status = error?.response?.status;
       const errData = error?.response?.data;
       toast.error(errData?.message || "Order failed");
 
+      // The server only marks the code used when the order is actually
+      // created, so after a rejection below the code entered is still valid
+      // and the OTP step is kept — the customer just confirms again.
+
       if (errData?.code === "DELIVERY_FEE_CHANGED") {
-        // Show the updated charge and make the customer confirm again. The
-        // OTP (if any) was already consumed server-side, so start that step over.
+        // Show the updated charge; the customer places the order again
         setDeliveryFee(Number(errData.deliveryFee));
         setShowModal(false);
-        setOtpRequired(false);
-        setOtpValue("");
         return;
       }
 
-      // Keep modal open on a wrong/expired OTP so the user can retry
-      if (otpRequired && /otp/i.test(errData?.message ?? "")) return;
+      if (errData?.code === "GUEST_ADVANCE_PAYMENT_REQUIRES_LOGIN") {
+        // Needs an online deposit, which is account-only
+        setLoginPrompt(errData.message);
+        setShowModal(false);
+        resetOtpStep();
+        return;
+      }
 
-      // Anything else (coupon removed, price changed…) may have changed the
-      // cart server-side — reload it so the summary shows what will actually
-      // be charged. Any OTP was consumed, so the next attempt sends a new one.
+      if (status === 429) {
+        // Hourly SMS limit for this phone (OTP_LIMIT)
+        setShowModal(false);
+        resetOtpStep();
+        return;
+      }
+
+      // Wrong/expired code: keep the modal open so the customer can retry
+      // or resend
+      if (otpRequired && /invalid or expired otp/i.test(errData?.message ?? ""))
+        return;
+
+      // Anything else (price changed, coupon removed, guest order limit…)
+      // may have changed the cart server-side; reload it so the summary
+      // shows what will actually be charged.
       refetch();
       setShowModal(false);
-      setOtpRequired(false);
-      setOtpValue("");
     } finally {
       setPlacingOrder(false);
     }
@@ -398,11 +458,11 @@ const CheckoutPageComponent = () => {
     setOtpValue("");
     setPlacingOrder(true);
     try {
-      await axiosSecure.post(`/orders/create`, buildOrderPayload());
+      const { data } = await postOrder(buildOrderPayload());
       setResendCountdown(60);
-      toast("New OTP sent to +880" + address.phone);
-    } catch {
-      toast.error("Failed to resend OTP");
+      toast(data?.message || "New OTP sent to +880" + address.phone);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to resend OTP");
     } finally {
       setPlacingOrder(false);
     }
@@ -414,6 +474,31 @@ const CheckoutPageComponent = () => {
         {/* LEFT: Shipping Form */}
         <div className="flex-1 space-y-8">
           <Title title="Shipping Address" />
+
+          {loginPrompt && (
+            <div className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex flex-wrap items-center justify-between gap-3">
+              <span>{loginPrompt}</span>
+              <Link
+                href="/login?redirect=/checkout/shipping-address"
+                className="border border-amber-800 px-4 py-2 text-xs font-bold uppercase hover:bg-amber-800 hover:text-white transition-colors"
+              >
+                Log in
+              </Link>
+            </div>
+          )}
+
+          {isGuest && !loginPrompt && (
+            <p className="text-sm text-gray-600 border border-gray-200 bg-gray-50 px-4 py-3">
+              Checking out as a guest — Cash on Delivery only. We&apos;ll text
+              a code to verify your phone.{" "}
+              <Link
+                href="/login?redirect=/checkout/shipping-address"
+                className="underline hover:text-black"
+              >
+                Log in instead
+              </Link>
+            </p>
+          )}
 
           <div className="space-y-6">
             {/* Full Name */}
@@ -449,8 +534,14 @@ const CheckoutPageComponent = () => {
                     districtId: id,
                   }));
 
-                  // auto-switch to online if COD not allowed
-                  if (SSLCOMMERZ_ENABLED && district && !finalCODAvailable) {
+                  // auto-switch to online if COD not allowed (not for
+                  // guests: online payment needs an account)
+                  if (
+                    SSLCOMMERZ_ENABLED &&
+                    !isGuest &&
+                    district &&
+                    !finalCODAvailable
+                  ) {
                     setPaymentMethod("online");
                   }
                 }}
@@ -626,13 +717,27 @@ const CheckoutPageComponent = () => {
                       {cart?.codMessage
                         ? cart.codMessage
                         : "Not available in this district"}
+                      {/* only when online payment exists to log in for */}
+                      {isGuest && SSLCOMMERZ_ENABLED && (
+                        <>
+                          {" "}
+                          — guest orders are Cash on Delivery only.{" "}
+                          <Link
+                            href="/login?redirect=/checkout/shipping-address"
+                            className="underline"
+                          >
+                            Log in
+                          </Link>{" "}
+                          to pay online.
+                        </>
+                      )}
                     </span>
                   )}
                 </span>
               </label>
 
-              {/* Pay Now */}
-              {SSLCOMMERZ_ENABLED && (
+              {/* Pay Now — account-only */}
+              {SSLCOMMERZ_ENABLED && !isGuest && (
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="radio"
@@ -673,7 +778,9 @@ const CheckoutPageComponent = () => {
                   deliveryFeeStatus === "ready" &&
                   // the server rejects orders with an ineligible coupon —
                   // the summary shows why and offers to remove it
-                  !cart.couponError
+                  !cart.couponError &&
+                  // guests can only pay by COD
+                  (!isGuest || !!finalCODAvailable)
                 )
               }
               handleConfirmOrder={handleConfirmOrder}

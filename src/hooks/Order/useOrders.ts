@@ -59,6 +59,9 @@ export interface ThumbOrder {
 
 export interface FullOrder {
   id: number;
+  // null for guest orders (placed without an account; see visitorId)
+  userId?: number | null;
+  visitorId?: string | null;
   orderId: string;
   trackingToken: string;
   customerName: string;
@@ -136,6 +139,8 @@ export interface GetAllOrdersOptions {
   thumb?: boolean;
   from?: string;
   to?: string;
+  // admin only: guest orders (no account) vs registered customers' orders
+  customerType?: "guest" | "registered";
 }
 // ===================
 // Hook
@@ -180,6 +185,7 @@ const useOrders = (options?: GetAllOrdersOptions): UseOrdersReturn => {
     if (options?.thumb) params.thumb = options.thumb;
     if (options?.from) params.from = options.from;
     if (options?.to) params.to = options.to;
+    if (options?.customerType) params.customerType = options.customerType;
 
     try {
       const res = await axiosSecure.get<

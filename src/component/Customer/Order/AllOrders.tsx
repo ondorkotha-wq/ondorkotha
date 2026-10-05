@@ -22,7 +22,7 @@ import {
   PauseCircle,
 } from "lucide-react";
 
-const STATUS_CONFIG: Record<
+export const STATUS_CONFIG: Record<
   OrderStatus,
   { label: string; icon: React.ReactNode; colorClass: string }
 > = {

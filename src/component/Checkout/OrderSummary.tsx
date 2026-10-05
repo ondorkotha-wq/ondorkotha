@@ -2,12 +2,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import useAxiosSecure from "@/hooks/Axios/useAxiosSecure";
 import TakaIcon from "../TakaIcon";
 import { isAuthenticated } from "@/utils/auth";
 import { getVisitorId } from "@/utils/visitor";
 import { CartItem } from "@/types/product.types";
+import { useAuth } from "@/context/AuthContext";
+import { GUEST_CHECKOUT_ENABLED } from "@/config/features";
 
 interface OrderSummaryProps {
   cartId: number | null;
@@ -50,6 +53,14 @@ const OrderSummary = ({
   const [code, setCode] = useState(coupon ?? "");
   const [removingCoupon, setRemovingCoupon] = useState(false);
   const isCheckoutPage = param?.includes("/checkout");
+
+  // From the auth context rather than localStorage, so the server render and
+  // the first client render agree. While auth is still loading, show neither
+  // the guest options nor the promo box.
+  const { token, loading: authLoading } = useAuth();
+  const isSignedIn = !authLoading && !!token;
+  const isGuest = !authLoading && !token;
+  const offerGuestCheckout = isGuest && GUEST_CHECKOUT_ENABLED;
 
   // console.log(cartItems,'cartItems');
 
@@ -199,12 +210,35 @@ const OrderSummary = ({
 
         {/* action button */}
         {!isCheckoutPage ? (
-          <button
-            onClick={handleCheckout}
-            className="w-full bg-[#4a5568] text-white py-3 uppercase tracking-widest text-xs font-bold hover:bg-black transition mb-3 cursor-pointer"
-          >
-            Proceed to Checkout
-          </button>
+          offerGuestCheckout ? (
+            // Guests choose: check out without an account (COD only), or log
+            // in first (online payment, coupons, order history everywhere)
+            <div className="space-y-2 mb-3">
+              <button
+                onClick={() => router.push(`/checkout/shipping-address`)}
+                disabled={!cartId}
+                className="w-full bg-[#4a5568] text-white py-3 uppercase tracking-widest text-xs font-bold hover:bg-black transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Checkout as Guest
+              </button>
+              <button
+                onClick={() => router.push("/login?redirect=/cart")}
+                className="w-full border border-[#4a5568] text-[#4a5568] py-3 uppercase tracking-widest text-xs font-bold hover:bg-black hover:text-white hover:border-black transition cursor-pointer"
+              >
+                Log in to Checkout
+              </button>
+              <p className="text-xs text-gray-500 text-center">
+                Guest orders are Cash on Delivery only.
+              </p>
+            </div>
+          ) : (
+            <button
+              onClick={handleCheckout}
+              className="w-full bg-[#4a5568] text-white py-3 uppercase tracking-widest text-xs font-bold hover:bg-black transition mb-3 cursor-pointer"
+            >
+              Proceed to Checkout
+            </button>
+          )
         ) : (
           <div>
             <button
@@ -224,48 +258,16 @@ const OrderSummary = ({
           </div>
         )}
 
-        {/* promo code  */}
-        <div className="mt-6 border-t border-gray-200 pt-4">
-          <details className="cursor-pointer group" open={!!coupon}>
-            <summary className="text-sm font-medium flex justify-between items-center list-none outline-none">
-              Promo Code{" "}
-              <span className="group-open:rotate-45 transition-transform text-lg">
-                +
-              </span>
-            </summary>
-            <div className="mt-3 flex gap-2">
-              <input
-                type="text"
-                className="border border-gray-200 flex-1 p-2 text-sm outline-none"
-                placeholder="Enter code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-              />
-              <button
-                onClick={handleApplyCoupon}
-                className="border border-gray-200 px-4 py-2 text-xs uppercase font-bold hover:bg-black hover:text-white"
-              >
-                Apply
-              </button>
-            </div>
+        {/* promo code — account-only; guests get a log-in link instead (the
+            backend rejects guest coupons with COUPON_REQUIRES_LOGIN) */}
+        {isGuest && (
+          <div className="mt-6 border-t border-gray-200 pt-4 text-sm">
             {coupon && (
-              <div className="mt-2 flex items-start justify-between gap-3 text-sm">
-                {couponError ? (
-                  <p className="text-amber-600">
-                    Coupon &quot;{coupon}&quot; can&apos;t be used: {couponError}
-                  </p>
-                ) : (
-                  <p className="text-green-600">
-                    Coupon &quot;{coupon}&quot; applied!{" "}
-                    {freeDelivery && discountAmount <= 0 ? (
-                      "Free delivery"
-                    ) : (
-                      <>
-                        Discount: <TakaIcon /> {discountAmount.toLocaleString()}
-                      </>
-                    )}
-                  </p>
-                )}
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <p className="text-amber-600">
+                  Coupon &quot;{coupon}&quot; needs an account and won&apos;t be
+                  applied.
+                </p>
                 <button
                   type="button"
                   onClick={handleRemoveCoupon}
@@ -276,8 +278,72 @@ const OrderSummary = ({
                 </button>
               </div>
             )}
-          </details>
-        </div>
+            <p className="text-gray-600">
+              Have a promo code?{" "}
+              <Link
+                href={`/login?redirect=${isCheckoutPage ? "/checkout/shipping-address" : "/cart"}`}
+                className="underline hover:text-black"
+              >
+                Log in to use it
+              </Link>
+            </p>
+          </div>
+        )}
+        {isSignedIn && (
+          <div className="mt-6 border-t border-gray-200 pt-4">
+            <details className="cursor-pointer group" open={!!coupon}>
+              <summary className="text-sm font-medium flex justify-between items-center list-none outline-none">
+                Promo Code{" "}
+                <span className="group-open:rotate-45 transition-transform text-lg">
+                  +
+                </span>
+              </summary>
+              <div className="mt-3 flex gap-2">
+                <input
+                  type="text"
+                  className="border border-gray-200 flex-1 p-2 text-sm outline-none"
+                  placeholder="Enter code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                />
+                <button
+                  onClick={handleApplyCoupon}
+                  className="border border-gray-200 px-4 py-2 text-xs uppercase font-bold hover:bg-black hover:text-white"
+                >
+                  Apply
+                </button>
+              </div>
+              {coupon && (
+                <div className="mt-2 flex items-start justify-between gap-3 text-sm">
+                  {couponError ? (
+                    <p className="text-amber-600">
+                      Coupon &quot;{coupon}&quot; can&apos;t be used: {couponError}
+                    </p>
+                  ) : (
+                    <p className="text-green-600">
+                      Coupon &quot;{coupon}&quot; applied!{" "}
+                      {freeDelivery && discountAmount <= 0 ? (
+                        "Free delivery"
+                      ) : (
+                        <>
+                          Discount: <TakaIcon /> {discountAmount.toLocaleString()}
+                        </>
+                      )}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    disabled={removingCoupon}
+                    className="shrink-0 text-xs underline text-gray-600 hover:text-black disabled:opacity-50 cursor-pointer"
+                  >
+                    {removingCoupon ? "Removing…" : "Remove"}
+                  </button>
+                </div>
+              )}
+            </details>
+          </div>
+        )}
       </div>
     </div>
   );

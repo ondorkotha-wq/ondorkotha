@@ -11,6 +11,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 import { mergeGuestUserWithRealUser } from "@/utils/merge";
+import { useQueryClient } from "@tanstack/react-query";
 import GoogleSignInButton from "./GoogleSignInButton";
 import { pushGTMEvent } from "@/lib/gtm";
 
@@ -69,6 +70,7 @@ export default function AuthModal({
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const axiosPublic = useAxiosPublic();
+  const queryClient = useQueryClient();
   const { setUser, setToken } = useAuth();
   const router = useRouter();
 
@@ -220,7 +222,8 @@ export default function AuthModal({
         setToken(data.token);
         setUser(data.user);
 
-        await mergeGuestUserWithRealUser(data.token);
+        // guest orders/cart on this browser move into the account
+        await mergeGuestUserWithRealUser(data.token, queryClient);
         pushGTMEvent({
           event: "login",
           method: useMobileForSignin ? "phone" : "email",
@@ -314,6 +317,9 @@ export default function AuthModal({
         handleView("otp-verification");
       } else {
         localStorage.setItem("token", data.token);
+        // Registered without an OTP step: merge here too, before the reload
+        // (which refetches everything, so no query refresh is needed)
+        await mergeGuestUserWithRealUser(data.token);
         handleView("signin");
         onClose();
         window.location.reload();
@@ -364,7 +370,8 @@ export default function AuthModal({
       setToken(token);
       setUser(data.user);
 
-      await mergeGuestUserWithRealUser(token);
+      // guest orders/cart on this browser move into the account
+      await mergeGuestUserWithRealUser(token, queryClient);
 
       pushGTMEvent({
         event: data.user.isNewUser ? "sign_up" : "login",
