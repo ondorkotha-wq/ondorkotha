@@ -15,6 +15,7 @@ import { cn } from "@/utils/mergeTailwind";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { ADMIN_NAV_SECTIONS, type NavSection } from "@/config/adminPermissions";
+import useAdminBadgeCounts from "@/hooks/Admin/useAdminBadgeCounts";
 
 const ROLE_LABELS: Record<string, string> = {
   SUPERADMIN: "Super Admin",
@@ -100,15 +101,33 @@ const AdminDrawer = () => {
 
   const navSections: NavSection[] = ADMIN_NAV_SECTIONS;
 
+  const badgeCounts = useAdminBadgeCounts();
+  // undefined rather than 0 so the `badge && …` checks below render nothing
+  const liveBadges: Record<string, number | undefined> = {
+    "/admin/orders": badgeCounts.pendingOrders || undefined,
+    "/admin/returns": badgeCounts.pendingReturns || undefined,
+    "/admin/refunds": badgeCounts.pendingRefunds || undefined,
+  };
+
   const visibleSections = navSections
     .map((section) => ({
       ...section,
       items: section.items
         .filter(isNavItemVisible)
-        .map((item) => ({
-          ...item,
-          sub: item.sub?.filter(isNavItemVisible),
-        }))
+        .map((item) => {
+          const sub = item.sub?.filter(isNavItemVisible).map((s) => ({
+            ...s,
+            badge: liveBadges[s.href] ?? s.badge,
+          }));
+          // Parent shows the total of its visible children, so a role that
+          // can't see a page never gets that page's count
+          const subTotal = sub?.reduce((n, s) => n + (s.badge ?? 0), 0) ?? 0;
+          return {
+            ...item,
+            sub,
+            badge: subTotal > 0 ? subTotal : item.badge,
+          };
+        })
         .filter((item) => !item.sub || item.sub.length > 0),
     }))
     .filter((section) => section.items.length > 0);
@@ -181,7 +200,7 @@ const AdminDrawer = () => {
                                 : "text-gray-700 hover:bg-gray-50 hover:text-gray-900",
                             )}
                           >
-                            <div className="flex items-center">
+                            <div className="relative flex items-center">
                               <Icon
                                 size={18}
                                 className={cn(
@@ -191,6 +210,10 @@ const AdminDrawer = () => {
                                     : "text-gray-400 group-hover:text-gray-600",
                                 )}
                               />
+                              {/* collapsed sidebar has no room for the count */}
+                              {!isAdminOpen && !!item.badge && (
+                                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
+                              )}
                               {isAdminOpen && (
                                 <span
                                   className={cn(

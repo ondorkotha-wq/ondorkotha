@@ -6,6 +6,7 @@ import { Bell, CheckCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import useAxiosSecure from "@/hooks/Axios/useAxiosSecure";
 import useInventorySocket from "@/hooks/Inventory/useInventorySocket";
+import { refreshAdminBadges } from "@/hooks/Admin/useAdminBadgeCounts";
 import { AdminNotification } from "@/types/inventory";
 import { cn } from "@/utils/mergeTailwind";
 
@@ -54,6 +55,7 @@ export default function NotificationBell() {
 
   useInventorySocket({
     onNotificationNew: (payload) => {
+      refreshAdminBadges();
       setUnreadCount(payload.unreadCount);
       setItems((prev) => [
         {

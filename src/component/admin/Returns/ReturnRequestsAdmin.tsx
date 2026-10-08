@@ -25,6 +25,7 @@ import {
   ReturnRequestStatus,
 } from "@/types/refund.types";
 import { useHasPermission } from "@/context/PermissionsContext";
+import { refreshAdminBadges } from "@/hooks/Admin/useAdminBadgeCounts";
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const RETURN_STATUS: Record<
@@ -133,6 +134,8 @@ function ReturnRequestDetailDrawer({
       toast.success(
         decision === "APPROVED" ? "Return request approved" : "Return request rejected",
       );
+      // the request leaves PENDING, so the sidebar count drops
+      refreshAdminBadges();
       setAdminNote("");
       await load();
       onRefresh();
@@ -170,6 +173,7 @@ function ReturnRequestDetailDrawer({
         notes: refundNotes.trim() || undefined,
       });
       toast.success("Refund initiated");
+      refreshAdminBadges();
       setRefundAmount("");
       setRefundNotes("");
       await load();

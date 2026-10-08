@@ -5,6 +5,7 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import useAxiosSecure from "@/hooks/Axios/useAxiosSecure";
+import { useAuth } from "@/context/AuthContext";
 import useOrderTrackingSocket from "@/hooks/Order/useOrderTrackingSocket";
 import LoadingDots from "@/component/Loading/LoadingDS";
 import Link from "next/link";
@@ -15,6 +16,7 @@ import {
   FiCreditCard,
   FiAlertCircle,
   FiDownload,
+  FiRotateCcw,
 } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import { devLog } from "@/utils/devlog";
@@ -24,6 +26,7 @@ const OrderDetails = () => {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
   const axiosSecure = useAxiosSecure();
+  const { token } = useAuth();
 
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -218,8 +221,17 @@ const OrderDetails = () => {
 
   const latestPayment = order?.payments?.[0];
   const isPartiallyPaid = order.paymentStatus === "PARTIALLY_PAID";
+  // A cancelled order can't be paid any more (the backend rejects it)
   const isPaymentIncomplete =
-    !!latestPayment && latestPayment.status !== "PAID";
+    !!latestPayment &&
+    latestPayment.status !== "PAID" &&
+    !["CANCELLED", "FAILED"].includes(order.status);
+  // Same rule as /customer/orders and /customer/order-tracking; the backend
+  // still enforces the return window and ownership
+  const canReturn = ["DELIVERED", "PARTIALLY_DELIVERED"].includes(
+    order.status,
+  );
+  const returnHref = `/refund?orderId=${encodeURIComponent(order.orderNumber)}`;
 
   return (
     <div className="min-h-screen bg-[#fffdfa] text-[#262626] antialiased">
@@ -253,6 +265,29 @@ const OrderDetails = () => {
                   <FiDownload className={downloading ? "animate-bounce" : ""} />
                   {downloading ? "Preparing..." : "Download Invoice"}
                 </button>
+              )}
+
+              {/* Returns need an account; a signed-out visitor logs in first
+                  (same redirect as the tracking page — guest orders move into
+                  the account on sign-in) */}
+              {canReturn && (
+                <Link
+                  href={token ? returnHref : "/login?redirect=/customer/orders"}
+                  className="flex items-center gap-2 text-[10px] uppercase tracking-widest px-5 py-2.5 border border-black font-bold hover:bg-black hover:text-white transition-all active:scale-95"
+                >
+                  <FiRotateCcw />
+                  Request Return
+                </Link>
+              )}
+
+              {order.status === "RETURN_REQUESTED" && token && (
+                <Link
+                  href={returnHref}
+                  className="flex items-center gap-2 text-[10px] uppercase tracking-widest px-5 py-2.5 border border-orange-500 text-orange-500 font-bold hover:bg-orange-500 hover:text-white transition-all active:scale-95"
+                >
+                  <FiRotateCcw />
+                  View Return Request
+                </Link>
               )}
 
               <span className="text-[10px] uppercase tracking-widest px-5 py-2.5 bg-black text-white font-bold">

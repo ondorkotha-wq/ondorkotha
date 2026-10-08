@@ -1,7 +1,12 @@
 "use client";
 import AuthModal from "@/component/Auth/AuthModal";
+import { isAuthenticated } from "@/utils/auth";
 import { useRouter } from "next/navigation";
 import React, { useState } from "react";
+
+// Pages that bounce signed-out visitors straight back to /login — closing the
+// modal without signing in must not send them there, or it reopens instantly.
+const SIGNED_IN_ONLY_PATHS = ["/dashboard"];
 
 const LoginPageComp = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -10,7 +15,16 @@ const LoginPageComp = () => {
   const handleClose = () => {
     setIsOpen(false);
     const urlParams = new URLSearchParams(window.location.search);
-    const redirect = urlParams.get("redirect") || "/";
+    let redirect = urlParams.get("redirect") || "/";
+
+    if (
+      !isAuthenticated() &&
+      SIGNED_IN_ONLY_PATHS.some(
+        (path) => redirect === path || redirect.startsWith(`${path}/`),
+      )
+    ) {
+      redirect = "/";
+    }
 
     router.push(redirect);
   };

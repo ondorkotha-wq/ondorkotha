@@ -22,6 +22,7 @@ import {
 import useRefunds from "@/hooks/Refunds/useRefunds";
 import { PaymentRefund, RefundStatus } from "@/types/refund.types";
 import { useHasPermission } from "@/context/PermissionsContext";
+import { refreshAdminBadges } from "@/hooks/Admin/useAdminBadgeCounts";
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const REFUND_STATUS: Record<
@@ -105,6 +106,7 @@ function NewDirectRefundModal({
         notes: notes.trim() || undefined,
       });
       toast.success("Refund initiated");
+      refreshAdminBadges();
       onCreated();
       onClose();
     } catch (e: any) {
@@ -248,6 +250,7 @@ function RefundDetailDrawer({
         notes: notes.trim() || undefined,
       });
       toast.success("Refund marked as completed");
+      refreshAdminBadges();
       await load();
       onRefresh();
     } catch (e: any) {
@@ -263,6 +266,8 @@ function RefundDetailDrawer({
       const res = await axiosSecure.patch(`/refunds/${id}/sync`);
       setData(res.data);
       toast.success("Synced with gateway");
+      // a sync can settle the refund (or mark it failed)
+      refreshAdminBadges();
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Failed to sync with gateway");

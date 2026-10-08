@@ -57,6 +57,7 @@ import { useRouter } from "next/navigation";
 import OrderFulfillmentModal from "./Fulfillment/OrderFulfillmentModal";
 import { ClipboardList } from "lucide-react";
 import { useHasPermission } from "@/context/PermissionsContext";
+import { refreshAdminBadges } from "@/hooks/Admin/useAdminBadgeCounts";
 
 // ── Status configs ─────────────────────────────────────────────────────────────
 const ORDER_STATUS: Record<
@@ -354,6 +355,7 @@ function StatusDropdown({
       await axiosSecure.patch(`/orders/${orderId}/status`, { status });
       toast.success(`Order marked as ${ORDER_STATUS[status].label}`);
       onChanged();
+      refreshAdminBadges();
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Failed to update status");
     } finally {
@@ -424,21 +426,160 @@ function StatusDropdown({
   );
 }
 
+// ── Cancel Order ──────────────────────────────────────────────────────────────
+// Orders that haven't left the warehouse; kept in sync with
+// ADMIN_CANCELLABLE_STATUSES in the backend order.service
+const CANCELLABLE_STATUSES: OrderStatus[] = [
+  "PENDING",
+  "CONFIRMED",
+  "PROCESSING",
+  "PACKED",
+  "ON_HOLD",
+];
+
+interface CancelOrderResponse {
+  refunds: {
+    amount: number;
+    method: "GATEWAY" | "MANUAL" | null;
+    status: string;
+  }[];
+  refundError: string | null;
+}
+
+const errorMessage = (e: any, fallback: string) => {
+  const msg = e?.response?.data?.message;
+  return Array.isArray(msg) ? msg.join(", ") : (msg ?? fallback);
+};
+
+function CancelOrderSection({
+  orderNumber,
+  willRefund,
+  onCancelled,
+}: {
+  orderNumber: string;
+  willRefund: boolean;
+  onCancelled: () => void;
+}) {
+  const axiosSecure = useAxiosSecure();
+  const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleCancel = async () => {
+    const trimmed = reason.trim();
+    if (trimmed.length < 3) {
+      toast.error("Please enter a reason for cancelling");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { data } = await axiosSecure.post<CancelOrderResponse>(
+        `/orders/${orderNumber}/cancel`,
+        { reason: trimmed },
+      );
+      toast.success(`Order ${orderNumber} cancelled — stock released`);
+
+      // The cancel stands even if the refund didn't go through
+      const refunds = data?.refunds ?? [];
+      const refundFailed =
+        !!data?.refundError || refunds.some((r) => r.status === "FAILED");
+      const total = refunds.reduce((sum, r) => sum + r.amount, 0);
+      if (refundFailed) {
+        toast.error("The refund didn't go through — retry it from Refunds", {
+          duration: 8000,
+        });
+      } else if (refunds.some((r) => r.method === "MANUAL")) {
+        toast.success(
+          `${taka(total)} refund created — send the money, then confirm it on Refunds`,
+          { duration: 8000 },
+        );
+      } else if (refunds.length > 0) {
+        toast.success(`${taka(total)} refund started through the gateway`, {
+          duration: 8000,
+        });
+      }
+
+      setConfirming(false);
+      setReason("");
+      onCancelled();
+      refreshAdminBadges();
+    } catch (e: any) {
+      toast.error(errorMessage(e, "Failed to cancel the order"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <DrawerSection title="Cancel Order">
+      {confirming ? (
+        <div className="space-y-2 pt-1">
+          <p className="text-xs text-slate-500">
+            Reserved stock goes back on sale.
+            {willRefund && " Everything paid on this order will be refunded."}
+            {" "}The customer is notified. This can&apos;t be undone.
+          </p>
+          <textarea
+            autoFocus
+            rows={2}
+            maxLength={500}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason (e.g. customer asked to cancel, out of stock)"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-slate-400 resize-none"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleCancel}
+              disabled={submitting}
+              className="flex-1 py-2 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {submitting ? "Cancelling..." : "Confirm Cancel"}
+            </button>
+            <button
+              onClick={() => {
+                setConfirming(false);
+                setReason("");
+              }}
+              disabled={submitting}
+              className="px-3 py-2 border border-slate-200 text-slate-500 text-xs font-medium rounded-lg"
+            >
+              Keep Order
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setConfirming(true)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 border border-red-200 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-50 transition-colors"
+        >
+          <Ban className="w-3.5 h-3.5" />
+          Cancel Order
+        </button>
+      )}
+    </DrawerSection>
+  );
+}
+
 // ── Order Detail Drawer ───────────────────────────────────────────────────────
 function OrderDetailDrawer({
   orderId,
   onClose,
   onRefresh,
   manualStatusEnabled,
+  cancelEnabled,
 }: {
   orderId: string;
   onClose: () => void;
   onRefresh: () => void;
   manualStatusEnabled: boolean;
+  cancelEnabled: boolean;
 }) {
   const axiosSecure = useAxiosSecure();
   const router = useRouter();
   const canUpdateStatus = useHasPermission("ORDER_UPDATE_STATUS");
+
+  // console.log(canUpdateStatus, "canUpdateStatus");
   const canManageCourier = useHasPermission("COURIER_MANAGE");
 
   const { order, isLoading, refetch } = useTrackOrder({
@@ -487,9 +628,7 @@ function OrderDetailDrawer({
       refetch();
       onRefresh();
     } catch (e: any) {
-      toast.error(
-        e?.response?.data?.message ?? "Failed to collect remainder",
-      );
+      toast.error(e?.response?.data?.message ?? "Failed to collect remainder");
     } finally {
       setSubmittingRemainder(false);
     }
@@ -557,8 +696,8 @@ function OrderDetailDrawer({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-red-700">
                   Out of stock —{" "}
-                  {order.items.filter((i) => i.isOutOfStock).length} item(s)
-                  in this order can&apos;t be fulfilled
+                  {order.items.filter((i) => i.isOutOfStock).length} item(s) in
+                  this order can&apos;t be fulfilled
                 </p>
                 <ul className="mt-1 space-y-0.5 text-xs text-red-600">
                   {order.items
@@ -566,8 +705,7 @@ function OrderDetailDrawer({
                     .map((item) => (
                       <li key={item.id}>
                         {item.name}
-                        {[item.color, item.size].filter(Boolean).length >
-                          0 &&
+                        {[item.color, item.size].filter(Boolean).length > 0 &&
                           ` (${[item.color, item.size].filter(Boolean).join(" / ")})`}
                       </li>
                     ))}
@@ -598,58 +736,59 @@ function OrderDetailDrawer({
                 automatically from the courier webhook.
               </p>
             ) : (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {(Object.keys(ORDER_STATUS) as OrderStatus[]).map((s) => {
-                const cfg = ORDER_STATUS[s];
-                const isCurrent = order.status === s;
-                const blocked = isShippedBlocked(s);
-                return (
-                  <button
-                    key={s}
-                    disabled={isCurrent || blocked}
-                    title={
-                      blocked
-                        ? `${pickGate!.pickedCount}/${pickGate!.requiredCount} piece(s) picked — use Fulfillment to finish picking first`
-                        : undefined
-                    }
-                    onClick={async () => {
-                      if (blocked) {
-                        toast.error(
-                          `Only ${pickGate!.pickedCount}/${pickGate!.requiredCount} piece(s) picked — can't ship yet`,
-                        );
-                        return;
+              <div className="flex flex-wrap gap-2 pt-1">
+                {(Object.keys(ORDER_STATUS) as OrderStatus[]).map((s) => {
+                  const cfg = ORDER_STATUS[s];
+                  const isCurrent = order.status === s;
+                  const blocked = isShippedBlocked(s);
+                  return (
+                    <button
+                      key={s}
+                      disabled={isCurrent || blocked}
+                      title={
+                        blocked
+                          ? `${pickGate!.pickedCount}/${pickGate!.requiredCount} piece(s) picked — use Fulfillment to finish picking first`
+                          : undefined
                       }
-                      try {
-                        await axiosSecure.patch(
-                          `/orders/${order.orderNumber}/status`,
-                          {
-                            status: s,
-                          },
-                        );
-                        toast.success(`Status → ${cfg.label}`);
-                        refetch();
-                        onRefresh();
-                      } catch (e: any) {
-                        toast.error(
-                          e?.response?.data?.message ??
-                            "Failed to update status",
-                        );
-                      }
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all ${
-                      isCurrent
-                        ? `${cfg.color} border-current opacity-100 cursor-default`
-                        : blocked
-                          ? "border-slate-100 text-slate-300 cursor-not-allowed"
-                          : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-800"
-                    }`}
-                  >
-                    {cfg.icon}
-                    {cfg.label}
-                  </button>
-                );
-              })}
-            </div>
+                      onClick={async () => {
+                        if (blocked) {
+                          toast.error(
+                            `Only ${pickGate!.pickedCount}/${pickGate!.requiredCount} piece(s) picked — can't ship yet`,
+                          );
+                          return;
+                        }
+                        try {
+                          await axiosSecure.patch(
+                            `/orders/${order.orderNumber}/status`,
+                            {
+                              status: s,
+                            },
+                          );
+                          toast.success(`Status → ${cfg.label}`);
+                          refetch();
+                          onRefresh();
+                          refreshAdminBadges();
+                        } catch (e: any) {
+                          toast.error(
+                            e?.response?.data?.message ??
+                              "Failed to update status",
+                          );
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all ${
+                        isCurrent
+                          ? `${cfg.color} border-current opacity-100 cursor-default`
+                          : blocked
+                            ? "border-slate-100 text-slate-300 cursor-not-allowed"
+                            : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-800"
+                      }`}
+                    >
+                      {cfg.icon}
+                      {cfg.label}
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </DrawerSection>
 
@@ -657,10 +796,7 @@ function OrderDetailDrawer({
           <DrawerSection title="Customer">
             <DrawerRow label="Name" value={order.shippingAddress.name} />
             <DrawerRow label="Phone" value={order.shippingAddress.phone} mono />
-            <DrawerRow
-              label="Address"
-              value={order.shippingAddress.address}
-            />
+            <DrawerRow label="Address" value={order.shippingAddress.address} />
             <DrawerRow
               label="District"
               value={order.shippingAddress.district}
@@ -828,6 +964,22 @@ function OrderDetailDrawer({
                   </button>
                 )}
               </DrawerSection>
+            )}
+
+          {/* Cancel Order */}
+          {cancelEnabled &&
+            canUpdateStatus &&
+            CANCELLABLE_STATUSES.includes(order.status) && (
+              <CancelOrderSection
+                orderNumber={order.orderNumber}
+                willRefund={["PAID", "PARTIALLY_PAID"].includes(
+                  order.paymentStatus,
+                )}
+                onCancelled={() => {
+                  refetch();
+                  onRefresh();
+                }}
+              />
             )}
 
           {/* Actions */}
@@ -1138,12 +1290,21 @@ export default function AllOrdersComponent() {
   // to come from the courier webhook, so keep the controls disabled until
   // we know the backend has manual updates turned on.
   const [manualStatusEnabled, setManualStatusEnabled] = useState(false);
+  // Separate switch (MANUAL_ORDER_CANCEL) — Cancel Order can be on while
+  // the status dropdown stays courier-driven
+  const [cancelEnabled, setCancelEnabled] = useState(false);
 
   useEffect(() => {
     axiosSecure
       .get("/orders/manual-status-enabled")
-      .then(({ data }) => setManualStatusEnabled(!!data?.enabled))
-      .catch(() => setManualStatusEnabled(false));
+      .then(({ data }) => {
+        setManualStatusEnabled(!!data?.enabled);
+        setCancelEnabled(!!data?.cancelEnabled);
+      })
+      .catch(() => {
+        setManualStatusEnabled(false);
+        setCancelEnabled(false);
+      });
   }, [axiosSecure]);
 
   const {
@@ -1477,6 +1638,7 @@ export default function AllOrdersComponent() {
           onClose={() => setDetailId(null)}
           onRefresh={refetch}
           manualStatusEnabled={manualStatusEnabled}
+          cancelEnabled={cancelEnabled}
         />
       )}
 
