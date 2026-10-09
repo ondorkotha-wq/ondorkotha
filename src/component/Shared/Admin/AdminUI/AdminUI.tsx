@@ -7,7 +7,15 @@
 "use client";
 
 import React, { ReactNode } from "react";
-import { Search, RefreshCw, X, Star } from "lucide-react";
+import {
+  Search,
+  RefreshCw,
+  X,
+  Star,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+} from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface Meta {
@@ -15,6 +23,66 @@ export interface Meta {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export type SortOrder = "asc" | "desc";
+
+export interface SortState<K extends string = string> {
+  sortBy: K;
+  order: SortOrder;
+}
+
+// ── Column sorting ────────────────────────────────────────────────────────────
+/**
+ * Clicking a new column sorts it descending (newest / highest first);
+ * clicking the active column again flips between descending and ascending.
+ */
+export function nextSort<K extends string>(
+  current: SortState<K>,
+  key: K,
+): SortState<K> {
+  if (current.sortBy !== key) return { sortBy: key, order: "desc" };
+  return { sortBy: key, order: current.order === "desc" ? "asc" : "desc" };
+}
+
+/** aria-sort value for a sortable <th>. */
+export function ariaSort(active: boolean, order: SortOrder) {
+  if (!active) return "none" as const;
+  return order === "asc" ? ("ascending" as const) : ("descending" as const);
+}
+
+/** Clickable header label with a direction arrow; put it inside a <th>. */
+export function SortableHeader({
+  label,
+  active,
+  order,
+  onClick,
+  className = "",
+}: {
+  label: ReactNode;
+  active: boolean;
+  order: SortOrder;
+  onClick: () => void;
+  className?: string;
+}) {
+  const Icon = !active ? ChevronsUpDown : order === "desc" ? ChevronDown : ChevronUp;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={
+        active
+          ? `Sorted ${order === "desc" ? "descending" : "ascending"} — click to reverse`
+          : "Click to sort"
+      }
+      className={`inline-flex items-center gap-1 hover:text-gray-900 transition-colors ${
+        active ? "text-gray-900" : ""
+      } ${className}`}
+    >
+      {label}
+      <Icon className={`w-3.5 h-3.5 shrink-0 ${active ? "" : "opacity-40"}`} />
+    </button>
+  );
 }
 
 // ── Badge ─────────────────────────────────────────────────────────────────────
@@ -245,26 +313,49 @@ export function AdminTable({
   loading,
   empty,
   emptyAction,
+  sortKeys,
+  sort,
+  onSort,
 }: {
   headers: string[];
   children: React.ReactNode;
   loading?: boolean;
   empty?: boolean;
   emptyAction?: React.ReactNode;
+  /** header label → backend sort key; listed headers become clickable */
+  sortKeys?: Partial<Record<string, string>>;
+  sort?: SortState;
+  onSort?: (key: string) => void;
 }) {
   return (
     <div className="overflow-x-auto bg-white rounded-xl border border-gray-200">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50">
-            {headers.map((h) => (
-              <th
-                key={h}
-                className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 first:pl-6 last:pr-6"
-              >
-                {h}
-              </th>
-            ))}
+            {headers.map((h) => {
+              const key = sortKeys?.[h];
+              const sortable = !!(key && sort && onSort);
+              const active = sortable && sort!.sortBy === key;
+              return (
+                <th
+                  key={h}
+                  aria-sort={sortable ? ariaSort(active, sort!.order) : undefined}
+                  className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 first:pl-6 last:pr-6"
+                >
+                  {sortable ? (
+                    <SortableHeader
+                      label={h}
+                      active={active}
+                      order={sort!.order}
+                      onClick={() => onSort!(key!)}
+                      className="uppercase tracking-wider font-semibold"
+                    />
+                  ) : (
+                    h
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">

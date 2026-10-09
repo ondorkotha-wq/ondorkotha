@@ -42,7 +42,7 @@ export default function ProtectedRoute({
 
       // If no specific roles required, just check authentication
       if (allAllowedRoles.length === 0) {
-        console.log("length 0", allAllowedRoles);
+      // console.log("length 0", allAllowedRoles);
         setIsAuthorized(true);
         setIsLoading(false);
         return;

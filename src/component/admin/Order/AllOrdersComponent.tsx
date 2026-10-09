@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import useOrders, {
   FullOrder,
   FraudStatus,
+  GetAllOrdersOptions,
   OrderStatus,
   PaymentStatus,
 } from "@/hooks/Order/useOrders";
@@ -51,6 +52,8 @@ import {
   DrawerSection,
   DrawerRow,
   PageHeader,
+  nextSort,
+  type SortState,
 } from "@/component/Shared/Admin/AdminUI/AdminUI";
 import useTrackOrder from "@/hooks/Track/useTrack";
 import { useRouter } from "next/navigation";
@@ -1274,6 +1277,14 @@ const CUSTOMER_TYPE_OPTIONS: { label: string; value: CustomerType }[] = [
   { label: "Registered customers", value: "registered" },
 ];
 
+type OrderSortKey = NonNullable<GetAllOrdersOptions["sortBy"]>;
+// table header → backend sortBy (the API whitelists exactly these three)
+const ORDER_SORT_KEYS: Partial<Record<string, OrderSortKey>> = {
+  Total: "total",
+  "Order Status": "status",
+  Date: "createdAt",
+};
+
 export default function AllOrdersComponent() {
   const axiosSecure = useAxiosSecure();
   const [page, setPage] = useState(1);
@@ -1282,6 +1293,11 @@ export default function AllOrdersComponent() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [customerType, setCustomerType] = useState<CustomerType | "">("");
+  // newest orders first by default
+  const [sort, setSort] = useState<SortState<OrderSortKey>>({
+    sortBy: "createdAt",
+    order: "desc",
+  });
   const [detailId, setDetailId] = useState<string | null>(null);
   const [fraudHistoryPhone, setFraudHistoryPhone] = useState<string | null>(
     null,
@@ -1320,7 +1336,14 @@ export default function AllOrdersComponent() {
     from: from || undefined,
     to: to || undefined,
     customerType: customerType || undefined,
+    sortBy: sort.sortBy,
+    order: sort.order,
   });
+
+  const handleSort = (key: string) => {
+    setSort((prev) => nextSort(prev, key as OrderSortKey));
+    setPage(1);
+  };
 
   // Debounce search
   const searchTimer = useRef<NodeJS.Timeout | null>(null);
@@ -1475,6 +1498,9 @@ export default function AllOrdersComponent() {
             "Date",
             "",
           ]}
+          sortKeys={ORDER_SORT_KEYS}
+          sort={sort}
+          onSort={handleSort}
           loading={isLoading}
           empty={typedOrders.length === 0}
           emptyAction={

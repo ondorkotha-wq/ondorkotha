@@ -73,7 +73,7 @@ const OrderDetails = () => {
   };
 
   const handleRetryPayment = async () => {
-    console.log("here");
+  // console.log("here");
     try {
       setRetrying(true);
 
@@ -81,7 +81,7 @@ const OrderDetails = () => {
         `/payments/sslcommerz/initiate/${orderId}`,
       );
 
-      console.log("Payment initiation response:", data);
+    // console.log("Payment initiation response:", data);
 
       if (!data?.data.redirectUrl) {
         toast.error("Payment initialization failed");

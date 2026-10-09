@@ -488,7 +488,7 @@ export default function CompanyInfoComp() {
     try {
       const res = await axiosSecure.patch("/company", form);
 
-      console.log(res.data, "resdata - patch company");
+    // console.log(res.data, "resdata - patch company");
       setData(res.data);
       setForm(res.data);
       setSavedFlash(true);

@@ -22,7 +22,7 @@ export const getUserRole = (): string | null => {
 
 export const hasRequiredRole = (requiredRoles: string[]): boolean => {
   const userRole = getUserRole();
-  console.log(userRole,'userRole');
+// console.log(userRole,'userRole');
   if (!userRole) return false;
   return requiredRoles.includes(userRole);
 };

@@ -17,13 +17,13 @@ const Track = () => {
 
   } = useTrackOrder({ trackingId: orderId });
 
-  console.log(orderData, "orderdataa");
+// console.log(orderData, "orderdataa");
 
   const handleTrack = (e: any) => {
     e.preventDefault();
     setError("");
 
-    console.log(trackingNumber, "trackingNumber");
+  // console.log(trackingNumber, "trackingNumber");
 
     setOrderId(trackingNumber);
   };

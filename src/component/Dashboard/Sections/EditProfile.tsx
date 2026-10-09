@@ -76,14 +76,14 @@ const EditProfile = ({ user, loading }: { user: any; loading: boolean }) => {
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
-    console.log(formData, "formData");
+  // console.log(formData, "formData");
     e.preventDefault();
 
     try {
       if (!userLoading) {
         const res = await axiosSecure.put("/users/update", formData);
 
-        console.log(res.data, "updateuser");
+      // console.log(res.data, "updateuser");
 
         setShowOtp(false);
         setOtpValue("");
@@ -101,7 +101,7 @@ const EditProfile = ({ user, loading }: { user: any; loading: boolean }) => {
   };
 
   const saveProfile = async (data: any) => {
-    console.log("Saving to Ondorkotha DB:", data);
+  // console.log("Saving to Ondorkotha DB:", data);
     // await api.updateProfile(data);
   };
 

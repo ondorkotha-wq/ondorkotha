@@ -91,7 +91,7 @@ const useFetchProducts = (
     });
 
     if (process.env.NODE_ENV === "development") {
-      console.log("Fetched products:", response.data);
+    // console.log("Fetched products:", response.data);
     }
 
     return response.data;
@@ -127,7 +127,7 @@ const useFetchProducts = (
     queryFn: fetchProducts,
     enabled: params.enabled ?? true,
     placeholderData: keepPreviousData, // React Query v5 syntax
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: params.staleTime ?? 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes (replaces cacheTime in v5)
     retry: 1,
     refetchOnWindowFocus: false,

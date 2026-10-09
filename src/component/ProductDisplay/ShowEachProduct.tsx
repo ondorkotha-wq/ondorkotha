@@ -221,7 +221,12 @@ export default function ShowEachProduct() {
     {
       id: 2,
       label: "Material / Dimension",
-      content: product?.dimension ? `Dimensions: ${product.dimension}` : "",
+      content: [
+        product?.material?.name && `Material: ${product.material.name}`,
+        product?.dimension && `Dimensions: ${product.dimension}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
     },
     {
       id: 3,

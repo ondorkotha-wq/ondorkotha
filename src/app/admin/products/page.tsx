@@ -15,8 +15,38 @@ import {
 } from "@/types/product.types";
 import { Search } from "lucide-react";
 import DemoGenerateButton from "@/component/admin/DemoGenerateButton";
+import {
+  SortableHeader,
+  ariaSort,
+  nextSort,
+  type SortState,
+} from "@/component/Shared/Admin/AdminUI/AdminUI";
 
 const PRODUCTS_PER_PAGE = 10;
+
+// keys the backend whitelists for /product/all sortBy
+type ProductSortKey = "createdAt" | "title" | "slug" | "basePrice" | "isActive";
+
+// mobile has no table headers, so it gets the same sorts as a dropdown
+const MOBILE_SORT_OPTIONS: { label: string; value: string }[] = [
+  { label: "Newest first", value: "createdAt:desc" },
+  { label: "Oldest first", value: "createdAt:asc" },
+  { label: "Name Z–A", value: "title:desc" },
+  { label: "Name A–Z", value: "title:asc" },
+  { label: "Price high–low", value: "basePrice:desc" },
+  { label: "Price low–high", value: "basePrice:asc" },
+  { label: "Active first", value: "isActive:desc" },
+  { label: "Inactive first", value: "isActive:asc" },
+  { label: "Slug Z–A", value: "slug:desc" },
+  { label: "Slug A–Z", value: "slug:asc" },
+];
+
+const formatDate = (d: string) =>
+  new Date(d).toLocaleDateString("en-BD", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
 const AllProducts = () => {
   const router = useRouter();
@@ -24,6 +54,11 @@ const AllProducts = () => {
   const [isActive, setIsActive] = useState<boolean | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  // newest products first by default
+  const [sort, setSort] = useState<SortState<ProductSortKey>>({
+    sortBy: "createdAt",
+    order: "desc",
+  });
 
   const axiosSecure = useAxiosSecure();
 
@@ -33,7 +68,30 @@ const AllProducts = () => {
     search: search || undefined,
     isActive,
     includeOutOfStock: true,
+    sortBy: sort.sortBy,
+    order: sort.order,
+    // always refetch on open so a product added a moment ago shows up
+    staleTime: 0,
   });
+
+  const handleSort = (key: ProductSortKey) => {
+    setSort((prev) => nextSort(prev, key));
+    setCurrentPage(1);
+  };
+
+  const sortableTh = (label: string, key: ProductSortKey) => {
+    const active = sort.sortBy === key;
+    return (
+      <th className="py-3 px-4" aria-sort={ariaSort(active, sort.order)}>
+        <SortableHeader
+          label={label}
+          active={active}
+          order={sort.order}
+          onClick={() => handleSort(key)}
+        />
+      </th>
+    );
+  };
 
   // Calculate stock safely
   const calculateStock = (product: Product) => {
@@ -91,7 +149,7 @@ const AllProducts = () => {
         `/product/${productId}/toggle-status`,
       );
 
-      //   console.log(response.data);
+      // // console.log(response.data);
 
       // Refetch products to update the list
       await refetch();
@@ -177,6 +235,26 @@ const AllProducts = () => {
           <option value="false">Inactive</option>
         </select>
 
+        <select
+          aria-label="Sort products"
+          className="md:hidden gray-border rounded-md px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
+          value={`${sort.sortBy}:${sort.order}`}
+          onChange={(e) => {
+            const [sortBy, order] = e.target.value.split(":");
+            setSort({
+              sortBy: sortBy as ProductSortKey,
+              order: order === "asc" ? "asc" : "desc",
+            });
+            setCurrentPage(1);
+          }}
+        >
+          {MOBILE_SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
         {(search || isActive !== null) && (
           <button
             onClick={clearFilters}
@@ -200,11 +278,13 @@ const AllProducts = () => {
           <thead className="bg-gray-100 text-left text-sm text-gray-600">
             <tr>
               <th className="py-3 px-4">#</th>
-              <th className="py-3 px-4">Product</th>
-              <th className="py-3 px-4">Slug</th>
-              <th className="py-3 px-4">Price</th>
+              {sortableTh("Product", "title")}
+              {sortableTh("Slug", "slug")}
+              {sortableTh("Price", "basePrice")}
+              {/* summed per size on the client — not a sortable column */}
               <th className="py-3 px-4">Stock</th>
-              <th className="py-3 px-4">Status</th>
+              {sortableTh("Status", "isActive")}
+              {sortableTh("Added", "createdAt")}
               <th className="py-3 px-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -212,7 +292,7 @@ const AllProducts = () => {
           <tbody className="text-sm">
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-gray-500">
+                <td colSpan={8} className="text-center py-12 text-gray-500">
                   <div className="flex flex-col items-center">
                     <LoadingDots />
                   </div>
@@ -220,7 +300,7 @@ const AllProducts = () => {
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-gray-500">
+                <td colSpan={8} className="text-center py-12 text-gray-500">
                   <div className="flex flex-col items-center">
                     {/* <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
                       <span className="text-2xl">📦</span>
@@ -321,6 +401,10 @@ const AllProducts = () => {
                       >
                         {product.isActive ? "Active" : "Inactive"}
                       </span>
+                    </td>
+
+                    <td className="py-3 px-4 text-gray-500 whitespace-nowrap">
+                      {product.createdAt ? formatDate(product.createdAt) : "—"}
                     </td>
 
                     <td className="py-3 px-4 text-right">

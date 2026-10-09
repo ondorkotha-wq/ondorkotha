@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     req.headers.get("x-real-ip") ||
     "unknown";
 
-  console.log("IP:", ip);
+// console.log("IP:", ip);
 
   return NextResponse.json({ ok: true });
 }

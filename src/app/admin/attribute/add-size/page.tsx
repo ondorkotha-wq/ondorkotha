@@ -34,9 +34,9 @@ const AddSize = () => {
 
     if (e.target instanceof HTMLInputElement && e.target.type === "checkbox") {
       checked = e.target.checked;
-      console.log(name, checked);
+    //  console.log(name, checked);
     } else {
-      console.log(name, value);
+    //  console.log(name, value);
     }
 
     setFormData((prev) => ({

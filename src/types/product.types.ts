@@ -193,6 +193,8 @@ export interface FetchProductsParams {
   thumb?: boolean;
   enabled?: boolean;
   includeOutOfStock?: boolean;
+  /** cache freshness in ms (default 5 min); 0 = refetch on every mount */
+  staleTime?: number;
 }
 
 export interface CartItem {

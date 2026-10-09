@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
 import { getSeoOverride, seoOverrideToMetadata } from "@/lib/seo/getSeoOverride";
+import { sanitizeCmsHtml } from "@/lib/sanitizeHtml";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -15,10 +17,13 @@ async function getCompany(): Promise<Company | null> {
     const res = await fetch(`${API_URL}/company`, {
       next: { revalidate: 3600 },
     });
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error(`Company fetch failed: ${res.status}`);
     return res.json();
-  } catch {
-    return null;
+  } catch (err) {
+    // Don't fail `next build` when the API is unreachable. At runtime, throw so
+    // ISR keeps serving the last good page instead of caching a 404.
+    if (process.env.NEXT_PHASE === PHASE_PRODUCTION_BUILD) return null;
+    throw err;
   }
 }
 
@@ -42,7 +47,9 @@ export default async function PrivacyPolicyPage() {
       <h1 className="text-3xl font-light mb-10">Privacy Policy</h1>
       <div
         className="prose-static"
-        dangerouslySetInnerHTML={{ __html: company.privacyPolicy }}
+        dangerouslySetInnerHTML={{
+          __html: sanitizeCmsHtml(company.privacyPolicy),
+        }}
       />
     </main>
   );

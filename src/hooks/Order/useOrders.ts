@@ -173,7 +173,7 @@ const useOrders = (options?: GetAllOrdersOptions): UseOrdersReturn => {
     PaginatedOrdersResponse<ThumbOrder | FullOrder>
   > => {
     if (!token) throw new Error("Unauthorized");
-    console.log(options, "options");
+  // console.log(options, "options");
 
     const params: Record<string, any> = {};
     if (options?.page) params.page = options.page;

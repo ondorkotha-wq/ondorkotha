@@ -1,5 +1,7 @@
 import { Metadata } from "next";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
 import { TermsCondition } from "@/types/terms-condition";
+import { sanitizeCmsHtml } from "@/lib/sanitizeHtml";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -8,10 +10,13 @@ async function getTerms(): Promise<TermsCondition[]> {
     const res = await fetch(`${API_URL}/terms-and-conditions`, {
       next: { revalidate: 3600 },
     });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error(`Terms fetch failed: ${res.status}`);
     return res.json();
-  } catch {
-    return [];
+  } catch (err) {
+    // Don't fail `next build` when the API is unreachable. At runtime, throw so
+    // ISR keeps serving the last good page instead of caching an empty one.
+    if (process.env.NEXT_PHASE === PHASE_PRODUCTION_BUILD) return [];
+    throw err;
   }
 }
 
@@ -37,7 +42,7 @@ export default async function TermsAndConditionsPage() {
               </h2>
               <div
                 className="prose-static"
-                dangerouslySetInnerHTML={{ __html: term.content }}
+                dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(term.content) }}
               />
             </section>
           ))}

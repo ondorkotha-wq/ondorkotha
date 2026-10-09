@@ -20,6 +20,7 @@ import {
 import useAxiosSecure from "@/hooks/Axios/useAxiosSecure";
 import { TermsCondition } from "@/types/terms-condition";
 import axios from "axios";
+import { revalidateCmsPage } from "@/lib/api/actions/revalidateCmsPage";
 
 interface FormState {
   title: string;
@@ -79,17 +80,23 @@ export default function TermsConditionsAdmin() {
   const handleSaveOrder = async () => {
     setIsSavingOrder(true);
     try {
-      await Promise.all(
-        items.map((item) =>
-          axiosSecure.patch(`/terms-and-conditions/${item.id}`, {
-            sortOrder: item.sortOrder,
-          }),
-        ),
+      // One atomic request — either the whole order is saved or none of it
+      const { data } = await axiosSecure.patch<TermsCondition[]>(
+        "/terms-and-conditions/reorder",
+        { ids: items.map((item) => item.id) },
       );
-      toast.success("Order saved");
+      setItems(data);
       setHasOrderChanges(false);
-    } catch {
-      toast.error("Failed to save order");
+      toast.success("Order saved");
+      revalidateCmsPage("/terms-and-conditions").catch(() => {});
+    } catch (err) {
+      const msg = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string })?.message
+        : null;
+      toast.error(msg ?? "Failed to save order");
+      // Show what's actually stored rather than the unsaved order
+      setHasOrderChanges(false);
+      fetchItems();
     } finally {
       setIsSavingOrder(false);
     }
@@ -117,23 +124,36 @@ export default function TermsConditionsAdmin() {
 
     setIsSaving(true);
     try {
+      // Update the list in place (no refetch) so an unsaved drag order survives
       if (editingId) {
-        await axiosSecure.patch(`/terms-and-conditions/${editingId}`, {
-          title: form.title,
-          content: form.content,
-          isActive: form.isActive,
-        });
+        const { data } = await axiosSecure.patch<TermsCondition>(
+          `/terms-and-conditions/${editingId}`,
+          {
+            title: form.title,
+            content: form.content,
+            isActive: form.isActive,
+          },
+        );
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === data.id ? { ...data, sortOrder: item.sortOrder } : item,
+          ),
+        );
       } else {
-        await axiosSecure.post("/terms-and-conditions", {
-          title: form.title,
-          content: form.content,
-          isActive: form.isActive,
-          sortOrder: items.length,
-        });
+        const { data } = await axiosSecure.post<TermsCondition>(
+          "/terms-and-conditions",
+          {
+            title: form.title,
+            content: form.content,
+            isActive: form.isActive,
+            sortOrder: items.length,
+          },
+        );
+        setItems((prev) => [...prev, data]);
       }
       toast.success("Saved");
       setIsModalOpen(false);
-      fetchItems();
+      revalidateCmsPage("/terms-and-conditions").catch(() => {});
     } catch (err) {
       const msg = axios.isAxiosError(err)
         ? (err.response?.data as { message?: string })?.message
@@ -150,8 +170,9 @@ export default function TermsConditionsAdmin() {
     try {
       await axiosSecure.delete(`/terms-and-conditions/${deleteTarget.id}`);
       toast.success("Deleted");
+      setItems((prev) => prev.filter((item) => item.id !== deleteTarget.id));
       setDeleteTarget(null);
-      fetchItems();
+      revalidateCmsPage("/terms-and-conditions").catch(() => {});
     } catch {
       toast.error("Failed to delete");
     } finally {

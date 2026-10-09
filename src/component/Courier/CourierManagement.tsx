@@ -239,10 +239,10 @@ const BookModal: React.FC<{
     try {
       // details=true — without it the response has no total/remainingAmount
       const r = await axiosSecure.get(`/orders/track/${id}?details=true`);
-      console.log(r.data, "couriodata");
+    // console.log(r.data, "couriodata");
       const o = r.data;
 
-      console.log(o, "data");
+    // console.log(o, "data");
       setOrderId(o.id);
       setOrderInfo(o);
       setPickGateLoading(true);
@@ -977,7 +977,7 @@ export default function CourierManagement() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  console.log(shipments, "shipments");
+// console.log(shipments, "shipments");
 
   // Modals
   const [showBookModal, setShowBookModal] = useState(false);

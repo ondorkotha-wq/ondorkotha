@@ -27,25 +27,13 @@ const footerData: { title: string; links: FooterLink[] }[] = [
     links: [
       { label: "Track Your Order", href: "/help/order-tracking" },
       { label: "Start a Return Or Exchange", href: "/refund" },
-      { label: "Returns & Exchanges", href: "/pages/return-policy" },
       { label: "Customer Service", href: "/help/help-center" },
       { label: "Current Promotions", href: "/sales" },
     ],
   },
   {
     title: "About Us",
-    links: [
-      { label: "Our Story", href: "/about" },
-      { label: "Diversity & Inclusion", href: "/pages/diversity-inclusion" },
-      { label: "Careers", href: "/pages/careers" },
-      { label: "Our Impact", href: "/pages/our-impact" },
-    ],
-  },
-  {
-    title: "Services",
-    links: [
-      { label: "Free Design Services & Guides", href: "/pages/design-services" },
-    ],
+    links: [{ label: "Our Story", href: "/about" }],
   },
   {
     title: "Connect",
@@ -58,7 +46,6 @@ const footerData: { title: string; links: FooterLink[] }[] = [
 
 // Icons for the fourth column (Desktop view only)
 const desktopConnectIcons = [
-  { label: "Store Locator", icon: MapPin, href: "/pages/store-locator" },
   { label: "Chat With Us", icon: MessageCircle, href: "/help/contact-us" },
 ];
 
@@ -215,7 +202,7 @@ const Footer: React.FC = () => {
         <div className="px-4">
           {/* Desktop Navigation Columns (Grid Layout) */}
           <div className="w-full flex flex-col-reverse lg:flex-row lg:pb-10 lg:pt-10 justify-around">
-            <div className="hidden lg:grid grid-cols-4 gap-8 justify-around">
+            <div className="hidden lg:grid grid-cols-3 gap-8 justify-around">
               {footerData?.map((section, index) => (
                 <div key={index}>
                   <h4 className="heading text-gray-900 mb-4 text-sm font-semibold">

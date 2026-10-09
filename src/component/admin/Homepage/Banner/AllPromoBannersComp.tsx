@@ -218,13 +218,13 @@ const AllPromoBannersComp: React.FC = () => {
       setIsSaving(true);
       try {
         if (id) {
-          console.log(formData, buildPayload(formData), "formData");
+        // console.log(formData, buildPayload(formData), "formData");
           const promoBanners = await axiosSecure.put(
             `/promo-banners/${id}`,
             buildPayload(formData),
           );
 
-          console.log(promoBanners, "frontend");
+        // console.log(promoBanners, "frontend");
           toast.success("Banner updated successfully");
           setEditingId(null);
         } else {

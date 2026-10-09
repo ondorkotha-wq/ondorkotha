@@ -84,7 +84,6 @@ const useTrackOrder = ({
       `/orders/track/${trackingId}?details=${details}`,
     );
 
-    console.log(data, "order-data");
     return data;
   };
 

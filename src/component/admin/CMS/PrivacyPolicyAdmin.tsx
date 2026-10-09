@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import { Save } from "lucide-react";
 import useAxiosSecure from "@/hooks/Axios/useAxiosSecure";
 import axios from "axios";
+import { revalidateCmsPage } from "@/lib/api/actions/revalidateCmsPage";
 
 export default function PrivacyPolicyAdmin() {
   const axiosSecure = useAxiosSecure();
@@ -32,8 +33,11 @@ export default function PrivacyPolicyAdmin() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await axiosSecure.patch("/company", { privacyPolicy: content });
+      await axiosSecure.patch("/company/privacy-policy", {
+        privacyPolicy: content,
+      });
       toast.success("Privacy policy saved");
+      revalidateCmsPage("/privacy-policy").catch(() => {});
     } catch (err) {
       const msg = axios.isAxiosError(err)
         ? (err.response?.data as { message?: string })?.message

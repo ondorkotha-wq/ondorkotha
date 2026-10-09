@@ -128,7 +128,7 @@ const CustomerDashboard = () => {
   const searchParams = useSearchParams();
   const { user, loading, logout } = useAuth();
 
-  console.log(user);
+// console.log(user);
 
   const axiosSecure = useAxiosSecure();
 

@@ -104,7 +104,7 @@ const useFetchSubcategoryWiseProducts = (
       { params: cleanParams },
     );
 
-    console.log(data, "subCategorySlug products");
+  // console.log(data, "subCategorySlug products");
 
     return data;
   };

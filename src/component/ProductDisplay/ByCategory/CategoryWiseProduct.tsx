@@ -96,7 +96,7 @@ export default function CategoryWiseProduct() {
       limit: PRODUCTS_PER_PAGE,
     });
 
-  console.log(products, "products");
+// console.log(products, "products");
 
   const { colors: colorsData, isLoading: isColorLoading } = useFetchColors({});
   const { materials, isLoading: isMaterialLoading } = useFetchMaterials({});

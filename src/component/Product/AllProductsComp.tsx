@@ -23,7 +23,7 @@ const AllProductsComp = () => {
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("q") ?? "";
 
-  console.log(searchQuery);
+// console.log(searchQuery);
 
   const [filters, setFilters] = useState<{
     colorIds?: number[];
@@ -80,7 +80,7 @@ const AllProductsComp = () => {
     order: sortParams.order,
   });
 
-  console.log(products[0]);
+// console.log(products[0]);
 
   const totalPages = meta?.totalPages || 1;
   const totalProducts = meta?.total || 0;

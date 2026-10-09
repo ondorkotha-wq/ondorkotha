@@ -25,7 +25,7 @@ const useFetchRecentlyViewedProducts = ({
   const fetchProducts = async (): Promise<RelatedProduct[]> => {
     let response: any = {};
     const visitorId = await getVisitorId();
-    console.log(visitorId, "visitorId");
+  // console.log(visitorId, "visitorId");
 
     if (isAuthenticated()) {
       response = await axiosSecure.get<RelatedProduct[]>(
